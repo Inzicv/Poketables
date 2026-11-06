@@ -10,7 +10,18 @@ Jeu pour réviser les tables de multiplication. Un Pokémon sauvage apparaît av
 
 Un seul essai par coffre. Mauvais code ou temps écoulé : le Pokémon s'enfuit et la bonne réponse s'affiche. La fin de partie liste les multiplications à réviser.
 
-Réglages et Pokédex sont enregistrés dans le navigateur (pas de compte, pas de serveur).
+Réglages et Pokédex sont enregistrés dans le navigateur.
+
+## Sauvegarde en ligne (facultative)
+Sur l'accueil, « Choisir mon pseudonyme » propose 3 pseudonymes façon Pokémon (ex. `mewdore`), avec « D'autres idées » pour en tirer d'autres. Pas de mot de passe, pas de nom, pas d'e-mail. Sur un autre appareil : « J'ai déjà un pseudonyme ».
+
+- Le Pokédex est sauvegardé automatiquement après chaque capture.
+- Si deux appareils jouent en même temps, les Pokédex sont **fusionnés** : aucun Pokémon n'est perdu.
+- En retrouvant un pseudonyme, les Pokémon déjà attrapés sur l'appareil s'ajoutent à la sauvegarde, et les réglages de la sauvegarde sont repris.
+- Hors ligne, le jeu reste jouable ; la sauvegarde repart au retour du réseau.
+- « Quitter cette sauvegarde » la garde en ligne ; « Supprimer ma sauvegarde en ligne » l'efface.
+
+Le pseudonyme suffit pour accéder à la sauvegarde : à réserver à un petit cercle de familles. Stockage : Vercel Blob privé (`src/lib/save-store.ts`, routes `src/app/api/save`). Sans le jeton `BLOB_READ_WRITE_TOKEN`, le jeu marche normalement mais la sauvegarde en ligne affiche « momentanément indisponible ».
 
 ## Rareté
 Chaque Pokémon a un poids d'apparition selon son rang (`TIER_WEIGHTS` dans `src/lib/game.ts`) :
@@ -42,9 +53,12 @@ Puis http://localhost:3000.
 npx tsc --noEmit && npm run lint && npm run check && npm run build
 npx next start -p 3100   # dans un autre terminal
 node scripts/verify-game.cjs
+node scripts/verify-cloud.cjs   # faux serveur en mémoire, aucun jeton nécessaire
 ```
 
 ## Déploiement Vercel
 1. vercel.com → Add New… → Project → importer `Inzicv/Poketables`.
-2. Framework détecté : Next.js. Aucune variable d'environnement.
-3. Deploy. La production suit la branche `main`.
+2. Framework détecté : Next.js. Deploy.
+3. Pour la sauvegarde en ligne : onglet **Storage** du projet → **Create Database** → **Blob** (accès privé) → le relier au projet. Vercel ajoute tout seul `BLOB_READ_WRITE_TOKEN`. Puis **Redeploy**.
+
+La production suit la branche `main`. Ne jamais mettre le jeton dans Git.

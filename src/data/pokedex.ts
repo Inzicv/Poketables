@@ -1,4 +1,4 @@
-// Les 297 Pokémon du jeu, avec leur rang de rareté d'après leur vraie lignée.
+// Les 300 Pokémon du jeu, avec leur rang de rareté d'après leur vraie lignée.
 // base : forme de base (et bébés) · evo1 : 1re évolution · evo2 : évolution finale
 // legend : légendaires et fabuleux · mythic : Mew et Mewtwo, les plus rares de tous
 export type Tier = "base" | "evo1" | "evo2" | "legend" | "mythic";
@@ -265,6 +265,9 @@ export const pokedex: PokemonEntry[] = [
   { number: 258, name: "Gobou", file: "258-gobou.webp", tier: "base" },
   { number: 259, name: "Flobio", file: "259-flobio.webp", tier: "evo1" },
   { number: 260, name: "Laggron", file: "260-laggron.webp", tier: "evo2" },
+  { number: 280, name: "Tarsal", file: "280-tarsal.webp", tier: "base" },
+  { number: 281, name: "Kirlia", file: "281-kirlia.webp", tier: "evo1" },
+  { number: 282, name: "Gardevoir", file: "282-gardevoir.webp", tier: "evo2" },
   { number: 311, name: "Posipi", file: "311-posipi.webp", tier: "base" },
   { number: 312, name: "Négapi", file: "312-negapi.webp", tier: "base" },
   { number: 387, name: "Tortipouss", file: "387-tortipouss.webp", tier: "base" },

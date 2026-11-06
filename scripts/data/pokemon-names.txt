@@ -258,6 +258,9 @@
 258 Gobou b
 259 Flobio 1
 260 Laggron 2
+280 Tarsal b
+281 Kirlia 1
+282 Gardevoir 2
 311 Posipi b
 312 Négapi b
 387 Tortipouss b

@@ -104,7 +104,7 @@ async function typeOnKeypad(page, value) {
 
   // Pokédex.
   await page.getByRole("button", { name: /Mon Pokédex/ }).click();
-  check("Pokédex 1 / 297", (await page.locator(".counter").textContent()).trim() === "1 / 297");
+  check("Pokédex 1 / 300", (await page.locator(".counter").textContent()).trim() === "1 / 300");
   await page.screenshot({ path: path.join(SHOTS, "dex-1440.png") });
   await page.setViewportSize({ width: 390, height: 844 });
   check("Pas de débordement à 390px (Pokédex)", !(await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth)));
@@ -114,7 +114,7 @@ async function typeOnKeypad(page, value) {
   await page.reload();
   await page.getByText("Multipliez-les tous !").waitFor();
   check("Réglages conservés (Ondine)", await page.getByRole("radio", { name: "Ondine" }).getAttribute("aria-checked") === "true");
-  check("Pokédex conservé", (await page.getByRole("button", { name: /Mon Pokédex/ }).textContent()).includes("1 / 297"));
+  check("Pokédex conservé", (await page.getByRole("button", { name: /Mon Pokédex/ }).textContent()).includes("1 / 300"));
   for (const w of [390, 960]) {
     await page.setViewportSize({ width: w, height: 844 });
     check(`Pas de débordement à ${w}px (accueil)`, !(await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth)));

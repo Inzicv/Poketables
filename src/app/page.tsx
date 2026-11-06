@@ -2,9 +2,12 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { pokedex, type PokemonEntry } from "@/data/pokedex";
+import CloudPanel from "./CloudPanel";
+import { useCloudSave, type CloudSave } from "./useCloudSave";
+import type { CloudSnapshot } from "@/lib/cloud";
 import {
   COUNT_OPTIONS, TIME_OPTIONS, buildRun, defaultSettings, loadPokedex, loadSettings, questionCount,
-  savePokedex, saveSettings, type Pokedex, type Question, type Settings, type Trainer,
+  sanitizeSettings, savePokedex, saveSettings, type Pokedex, type Question, type Settings, type Trainer,
 } from "@/lib/game";
 
 type Screen = "home" | "play" | "end" | "dex";
@@ -55,12 +58,16 @@ export default function Home() {
   }, []);
   useEffect(() => { if (ready) savePokedex(caught); }, [caught, ready]);
 
+  const snapshot = useMemo<CloudSnapshot>(() => ({ pokedex: caught, settings }), [caught, settings]);
+  const applyRemote = useCallback((value: CloudSnapshot) => { setCaught(value.pokedex); setSettings(sanitizeSettings(value.settings)); }, []);
+  const cloud = useCloudSave(snapshot, applyRemote, ready);
+
   const openDex = (from: Screen) => { setDexFrom(from); setScreen("dex"); };
 
   if (!ready) return <main className="shell"><p className="loading">Chargement des Pokémon…</p></main>;
 
   return <main className="shell">
-    {screen === "home" && <HomeScreen settings={settings} setSettings={setSettings} caughtCount={Object.keys(caught).length} onStart={start} onDex={() => openDex("home")} />}
+    {screen === "home" && <HomeScreen settings={settings} setSettings={setSettings} caughtCount={Object.keys(caught).length} cloud={cloud} onStart={start} onDex={() => openDex("home")} />}
     {screen === "play" && run[index] && <PlayScreen
       key={index}
       question={run[index]} index={index} total={run.length} settings={settings}
@@ -83,7 +90,7 @@ function Logo({ small }: { small?: boolean }) {
   </div>;
 }
 
-function HomeScreen({ settings, setSettings, caughtCount, onStart, onDex }: { settings: Settings; setSettings: (s: Settings) => void; caughtCount: number; onStart: () => void; onDex: () => void }) {
+function HomeScreen({ settings, setSettings, caughtCount, cloud, onStart, onDex }: { settings: Settings; setSettings: (s: Settings) => void; caughtCount: number; cloud: CloudSave; onStart: () => void; onDex: () => void }) {
   const toggle = (t: number) => setSettings({ ...settings, tables: settings.tables.includes(t) ? settings.tables.filter(x => x !== t) : [...settings.tables, t].sort((a, b) => a - b) });
   const total = settings.tables.length ? questionCount(settings) : 0;
   return <section className="home screen-in">
@@ -122,6 +129,7 @@ function HomeScreen({ settings, setSettings, caughtCount, onStart, onDex }: { se
       <button className="primary" disabled={!settings.tables.length} onClick={onStart}>Partir à la chasse ! {total ? `(${total} Pokémon)` : ""}</button>
       <button className="secondary" onClick={onDex}>📖 Mon Pokédex · {caughtCount} / {pokedex.length}</button>
     </div>
+    <CloudPanel cloud={cloud} />
   </section>;
 }
 
