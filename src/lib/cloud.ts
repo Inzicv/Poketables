@@ -22,13 +22,6 @@ export function sanitizeSnapshot(value: unknown): CloudSnapshot | null {
   return { pokedex: sanitizePokedex(raw.pokedex), settings: sanitizeSettings(raw.settings) };
 }
 
-/** Fusionne deux Pokédex sans rien perdre : on garde chaque Pokémon, avec le plus grand nombre de captures. */
-export function mergePokedex(a: Pokedex, b: Pokedex): Pokedex {
-  const out: Pokedex = { ...a };
-  for (const [key, count] of Object.entries(b)) out[Number(key)] = Math.max(out[Number(key)] ?? 0, count);
-  return out;
-}
-
 export function samePokedex(a: Pokedex, b: Pokedex) {
   const ka = Object.keys(a), kb = Object.keys(b);
   return ka.length === kb.length && ka.every(k => a[Number(k)] === b[Number(k)]);

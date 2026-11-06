@@ -13,15 +13,15 @@ Un seul essai par coffre. Mauvais code ou temps écoulé : le Pokémon s'enfuit 
 Réglages et Pokédex sont enregistrés dans le navigateur.
 
 ## Sauvegarde en ligne (facultative)
-Sur l'accueil, « Choisir mon pseudonyme » propose 3 pseudonymes façon Pokémon (ex. `mewdore`), avec « D'autres idées » pour en tirer d'autres. Pas de mot de passe, pas de nom, pas d'e-mail. Sur un autre appareil : « J'ai déjà un pseudonyme ».
+Un pseudonyme par enfant, pensé pour des frères et sœurs sur la même tablette. Pas de mot de passe, pas de nom, pas d'e-mail.
 
-- Le Pokédex est sauvegardé automatiquement après chaque capture.
-- Si deux appareils jouent en même temps, les Pokédex sont **fusionnés** : aucun Pokémon n'est perdu.
-- En retrouvant un pseudonyme, les Pokémon déjà attrapés sur l'appareil s'ajoutent à la sauvegarde, et les réglages de la sauvegarde sont repris.
+- **Choisir mon pseudonyme** : 3 propositions façon Pokémon (ex. `mewdore`), « D'autres idées » pour en tirer d'autres. Le Pokédex de l'appareil devient celui de ce pseudonyme.
+- **J'ai déjà un pseudonyme** : charge son Pokédex et ses réglages à la place de ceux de l'appareil (jamais de mélange). Si l'appareil a des Pokémon non sauvegardés, le jeu demande confirmation et en garde une copie de secours locale.
+- **Changer de joueur** : sauvegarde d'abord, puis vide l'appareil pour l'enfant suivant. Refusé tant que la sauvegarde n'est pas partie (hors ligne).
+- Sauvegarde automatique après chaque capture. Si le même pseudonyme a changé sur un autre appareil pendant que celui-ci avait du nouveau, la synchro s'arrête et propose « Reprendre le Pokédex en ligne » ou « Garder celui de cet appareil ».
 - Hors ligne, le jeu reste jouable ; la sauvegarde repart au retour du réseau.
-- « Quitter cette sauvegarde » la garde en ligne ; « Supprimer ma sauvegarde en ligne » l'efface.
 
-Le pseudonyme suffit pour accéder à la sauvegarde : à réserver à un petit cercle de familles. Stockage : Vercel Blob privé (`src/lib/save-store.ts`, routes `src/app/api/save`). Sans le jeton `BLOB_READ_WRITE_TOKEN`, le jeu marche normalement mais la sauvegarde en ligne affiche « momentanément indisponible ».
+Le pseudonyme suffit pour accéder à la sauvegarde : à réserver à un petit cercle de familles. Stockage : Vercel Blob privé (`src/lib/save-store.ts`, routes `src/app/api/save`), dans le dossier `saves/`. Le même Blob store que La Guilde des CE2 peut servir : la Guilde utilise `adventures/`, aucun mélange. Sans le jeton `BLOB_READ_WRITE_TOKEN`, le jeu marche normalement mais la sauvegarde en ligne affiche « momentanément indisponible ».
 
 ## Rareté
 Chaque Pokémon a un poids d'apparition selon son rang (`TIER_WEIGHTS` dans `src/lib/game.ts`) :
@@ -59,6 +59,6 @@ node scripts/verify-cloud.cjs   # faux serveur en mémoire, aucun jeton nécessa
 ## Déploiement Vercel
 1. vercel.com → Add New… → Project → importer `Inzicv/Poketables`.
 2. Framework détecté : Next.js. Deploy.
-3. Pour la sauvegarde en ligne : onglet **Storage** du projet → **Create Database** → **Blob** (accès privé) → le relier au projet. Vercel ajoute tout seul `BLOB_READ_WRITE_TOKEN`. Puis **Redeploy**.
+3. Pour la sauvegarde en ligne : onglet **Storage** du projet → relier le Blob store (celui de la Guilde convient). Vercel ajoute tout seul `BLOB_READ_WRITE_TOKEN`. Puis **Redeploy**.
 
 La production suit la branche `main`. Ne jamais mettre le jeton dans Git.

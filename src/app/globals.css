@@ -252,3 +252,5 @@ img { max-width: 100%; }
 .cloud-hint { display: block; color: var(--muted); margin-top: 6px; }
 .cloud-status { margin: 12px 0 0; font-weight: 700; color: var(--blue-dark); }
 .danger-link { color: var(--wrong); }
+.player-chip { width: fit-content; max-width: 100%; margin: -8px auto 16px; background: #fff; border-radius: 999px; padding: 6px 16px; box-shadow: var(--shadow); overflow-wrap: anywhere; }
+.player-chip b { color: var(--red); }

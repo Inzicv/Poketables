@@ -95,6 +95,7 @@ function HomeScreen({ settings, setSettings, caughtCount, cloud, onStart, onDex 
   const total = settings.tables.length ? questionCount(settings) : 0;
   return <section className="home screen-in">
     <Logo />
+    {cloud.nickname && <p className="player-chip">🎮 Joueur : <b>{cloud.nickname}</b></p>}
     <div className="panel">
       <h2>Choisis ton dresseur</h2>
       <div className="trainers" role="radiogroup" aria-label="Dresseur">
@@ -129,7 +130,7 @@ function HomeScreen({ settings, setSettings, caughtCount, cloud, onStart, onDex 
       <button className="primary" disabled={!settings.tables.length} onClick={onStart}>Partir à la chasse ! {total ? `(${total} Pokémon)` : ""}</button>
       <button className="secondary" onClick={onDex}>📖 Mon Pokédex · {caughtCount} / {pokedex.length}</button>
     </div>
-    <CloudPanel cloud={cloud} />
+    <CloudPanel cloud={cloud} localCount={caughtCount} />
   </section>;
 }
 

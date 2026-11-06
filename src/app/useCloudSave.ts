@@ -1,10 +1,13 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { mergePokedex, sameSnapshot, sanitizeSnapshot, type CloudSnapshot, type Remote } from "@/lib/cloud";
+import { defaultSettings } from "@/lib/game";
+import { sameSnapshot, sanitizeSnapshot, type CloudSnapshot, type Remote } from "@/lib/cloud";
 
 type Binding = { nickname: string; etag: string; synced: CloudSnapshot };
 const BINDING_KEY = "poketable:cloud:v1";
+const BACKUP_KEY = "poketable:before-restore:v1";
+const emptySnapshot = (): CloudSnapshot => ({ pokedex: {}, settings: defaultSettings });
 
 class RequestError extends Error {
   constructor(public status: number, message: string) { super(message); }
@@ -33,21 +36,28 @@ function writeBinding(binding: Binding | null) {
   try { if (binding) localStorage.setItem(BINDING_KEY, JSON.stringify(binding)); else localStorage.removeItem(BINDING_KEY); } catch { /* stockage indisponible */ }
 }
 
+const messageOf = (error: unknown, fallback: string) => error instanceof Error && error.message ? error.message : fallback;
+
 /**
- * Sauvegarde en ligne par pseudonyme.
- * Le Pokédex local est envoyé après chaque changement. Si un autre appareil a modifié la sauvegarde,
- * les deux Pokédex sont fusionnés (aucun Pokémon perdu) avant d'être renvoyés.
+ * Sauvegarde en ligne par pseudonyme, un pseudonyme par enfant.
+ * - Le Pokédex de l'appareil est envoyé après chaque changement.
+ * - Retrouver un pseudonyme REMPLACE le Pokédex de l'appareil (jamais de mélange entre frères et sœurs).
+ * - « Changer de joueur » sauvegarde d'abord, puis vide l'appareil pour l'enfant suivant.
+ * - Si le même pseudonyme a changé ailleurs pendant que celui-ci avait aussi du nouveau,
+ *   la synchro s'arrête et on choisit la version à garder.
  */
 export function useCloudSave(local: CloudSnapshot, apply: (snapshot: CloudSnapshot) => void, ready: boolean) {
   const [binding, setBinding] = useState<Binding | null>(null);
   const [status, setStatus] = useState("");
   const [busy, setBusy] = useState(false);
+  const [conflict, setConflict] = useState(false);
   const bindingRef = useRef<Binding | null>(null);
+  const conflictRef = useRef(false);
   const localRef = useRef(local);
   const applyRef = useRef(apply);
   const syncing = useRef(false);
   const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
-  const pushRef = useRef<() => Promise<void>>(async () => {});
+  const pushRef = useRef<() => Promise<boolean>>(async () => true);
   localRef.current = local;
   applyRef.current = apply;
 
@@ -56,71 +66,81 @@ export function useCloudSave(local: CloudSnapshot, apply: (snapshot: CloudSnapsh
     setBinding(value);
     writeBinding(value);
   }, []);
+  const markConflict = useCallback((value: boolean) => {
+    conflictRef.current = value;
+    setConflict(value);
+  }, []);
+  const lose = useCallback(() => {
+    clearTimeout(timer.current);
+    bind(null);
+    markConflict(false);
+    setStatus("Cette sauvegarde en ligne n’existe plus. Le Pokédex reste sur cet appareil.");
+  }, [bind, markConflict]);
 
-  const push = useCallback(async () => {
+  /** Envoie le Pokédex local. Renvoie true si tout est en ligne. */
+  const push = useCallback(async (): Promise<boolean> => {
     const current = bindingRef.current;
-    if (!current || syncing.current) return;
-    let toSend = localRef.current;
-    if (sameSnapshot(toSend, current.synced)) return;
+    if (!current) return true;
+    if (conflictRef.current || syncing.current) return false;
+    const toSend = localRef.current;
+    if (sameSnapshot(toSend, current.synced)) return true;
     syncing.current = true;
     setStatus("Sauvegarde en cours…");
     try {
-      let etag = current.etag;
-      for (let attempt = 0; ; attempt++) {
-        try {
-          const remote = await request<Remote>(`/${current.nickname}`, { method: "PUT", body: JSON.stringify({ snapshot: toSend, etag }) });
-          if (bindingRef.current?.nickname !== current.nickname) return;
-          bind({ nickname: remote.nickname, etag: remote.etag, synced: remote.snapshot });
-          setStatus("Pokédex sauvegardé ✓");
-          return;
-        } catch (error) {
-          if (!(error instanceof RequestError) || error.status !== 409 || attempt >= 2) throw error;
-          // Un autre appareil a sauvegardé entre-temps : on fusionne et on recommence.
-          const remote = await request<Remote>(`/${current.nickname}`);
-          toSend = { pokedex: mergePokedex(toSend.pokedex, remote.snapshot.pokedex), settings: toSend.settings };
-          applyRef.current(toSend);
-          etag = remote.etag;
-        }
-      }
+      const remote = await request<Remote>(`/${current.nickname}`, { method: "PUT", body: JSON.stringify({ snapshot: toSend, etag: current.etag }) });
+      if (bindingRef.current?.nickname !== current.nickname) return false;
+      bind({ nickname: remote.nickname, etag: remote.etag, synced: remote.snapshot });
+      setStatus("Pokédex sauvegardé ✓");
+      return sameSnapshot(localRef.current, remote.snapshot);
     } catch (error) {
-      if (error instanceof RequestError && error.status === 404) {
-        bind(null);
-        setStatus("Cette sauvegarde en ligne n’existe plus. Ton Pokédex reste sur cet appareil.");
-      } else setStatus(error instanceof Error ? error.message : "La sauvegarde n’a pas abouti.");
+      if (error instanceof RequestError && error.status === 404) lose();
+      else if (error instanceof RequestError && error.status === 409) {
+        markConflict(true);
+        setStatus(`Le Pokédex de ${current.nickname} a changé sur un autre appareil. Choisis la version à garder.`);
+      } else setStatus(messageOf(error, "La sauvegarde n’a pas abouti."));
+      return false;
     } finally {
       syncing.current = false;
       // Un changement arrivé pendant l'envoi repartira juste après.
       const after = bindingRef.current;
-      if (after && !sameSnapshot(localRef.current, after.synced)) setTimeout(() => { void pushRef.current(); }, 1500);
+      if (after && !conflictRef.current && !sameSnapshot(localRef.current, after.synced)) {
+        clearTimeout(timer.current);
+        timer.current = setTimeout(() => { void pushRef.current(); }, 1500);
+      }
     }
-  }, [bind]);
+  }, [bind, lose, markConflict]);
   pushRef.current = push;
 
   const schedule = useCallback((delay = 800) => {
     clearTimeout(timer.current);
-    timer.current = setTimeout(() => { void push(); }, delay);
-  }, [push]);
+    timer.current = setTimeout(() => { void pushRef.current(); }, delay);
+  }, []);
 
+  /** Vérifie la version en ligne (retour sur l'onglet, réseau revenu, démarrage). */
   const refresh = useCallback(async () => {
     const current = bindingRef.current;
-    if (!current || syncing.current) return;
+    if (!current || syncing.current || conflictRef.current) return;
     try {
       const remote = await request<Remote>(`/${current.nickname}`);
       if (bindingRef.current?.nickname !== current.nickname) return;
       if (remote.etag !== current.etag) {
-        const merged = { pokedex: mergePokedex(localRef.current.pokedex, remote.snapshot.pokedex), settings: localRef.current.settings };
-        applyRef.current(merged);
-        bind({ nickname: remote.nickname, etag: remote.etag, synced: remote.snapshot });
-        setStatus("Pokédex mis à jour avec ton autre appareil ✓");
+        if (sameSnapshot(localRef.current, current.synced)) {
+          // Rien de nouveau ici : on prend la version en ligne, plus récente.
+          applyRef.current(remote.snapshot);
+          bind({ nickname: remote.nickname, etag: remote.etag, synced: remote.snapshot });
+          setStatus("Pokédex mis à jour depuis ton autre appareil ✓");
+        } else {
+          markConflict(true);
+          setStatus(`Le Pokédex de ${current.nickname} a changé sur un autre appareil. Choisis la version à garder.`);
+        }
+        return;
       }
       schedule(300);
     } catch (error) {
-      if (error instanceof RequestError && error.status === 404) {
-        bind(null);
-        setStatus("Cette sauvegarde en ligne n’existe plus. Ton Pokédex reste sur cet appareil.");
-      } else setStatus(error instanceof Error ? error.message : "");
+      if (error instanceof RequestError && error.status === 404) lose();
+      else setStatus(messageOf(error, ""));
     }
-  }, [bind, schedule]);
+  }, [bind, lose, markConflict, schedule]);
 
   // Au démarrage : reprendre la sauvegarde liée, puis surveiller le retour sur l'onglet et le réseau.
   useEffect(() => {
@@ -145,42 +165,88 @@ export function useCloudSave(local: CloudSnapshot, apply: (snapshot: CloudSnapsh
   const suggest = useCallback(async () => {
     setBusy(true);
     try { return (await request<{ nicknames: string[] }>("/suggest")).nicknames; }
-    catch (error) { setStatus(error instanceof Error ? error.message : "Réessaie dans un instant."); return []; }
+    catch (error) { setStatus(messageOf(error, "Réessaie dans un instant.")); return []; }
     finally { setBusy(false); }
   }, []);
 
+  /** Crée la sauvegarde de l'enfant qui joue sur cet appareil, avec son Pokédex actuel. */
   const create = useCallback(async (nickname: string) => {
     setBusy(true);
     try {
-      const snapshot = localRef.current;
-      const remote = await request<Remote>("", { method: "POST", body: JSON.stringify({ nickname, snapshot }) });
+      const remote = await request<Remote>("", { method: "POST", body: JSON.stringify({ nickname, snapshot: localRef.current }) });
       bind({ nickname: remote.nickname, etag: remote.etag, synced: remote.snapshot });
+      markConflict(false);
       setStatus("C’est sauvegardé ! Note bien ton pseudonyme.");
       return true;
-    } catch (error) { setStatus(error instanceof Error ? error.message : "Réessaie dans un instant."); return false; }
+    } catch (error) { setStatus(messageOf(error, "Réessaie dans un instant.")); return false; }
     finally { setBusy(false); }
-  }, [bind]);
+  }, [bind, markConflict]);
 
+  /** Charge le Pokédex d'un pseudonyme à la place de celui de l'appareil. */
   const retrieve = useCallback(async (value: string) => {
     const nickname = value.trim().toLowerCase();
     if (!nickname) return false;
     setBusy(true);
     try {
       const remote = await request<Remote>(`/${encodeURIComponent(nickname)}`);
-      // Les Pokémon de cet appareil s'ajoutent à la sauvegarde retrouvée ; on reprend ses réglages.
-      applyRef.current({ pokedex: mergePokedex(localRef.current.pokedex, remote.snapshot.pokedex), settings: remote.snapshot.settings });
+      try { localStorage.setItem(BACKUP_KEY, JSON.stringify(localRef.current)); } catch { /* copie de secours facultative */ }
+      clearTimeout(timer.current);
+      applyRef.current(remote.snapshot);
       bind({ nickname: remote.nickname, etag: remote.etag, synced: remote.snapshot });
-      setStatus("Pokédex retrouvé ✓");
+      markConflict(false);
+      setStatus(`Bonjour ${remote.nickname} ! Ton Pokédex est chargé ✓`);
       return true;
-    } catch (error) { setStatus(error instanceof Error ? error.message : "Vérifie ton pseudonyme."); return false; }
+    } catch (error) { setStatus(messageOf(error, "Vérifie ton pseudonyme.")); return false; }
     finally { setBusy(false); }
-  }, [bind]);
+  }, [bind, markConflict]);
 
-  const leave = useCallback(() => {
-    clearTimeout(timer.current);
-    bind(null);
-    setStatus("La sauvegarde reste en ligne. Ton pseudonyme permet de la retrouver.");
-  }, [bind]);
+  /** Sauvegarde puis vide l'appareil pour l'enfant suivant. */
+  const switchPlayer = useCallback(async () => {
+    const current = bindingRef.current;
+    if (!current) return true;
+    setBusy(true);
+    try {
+      clearTimeout(timer.current);
+      for (let i = 0; i < 20 && syncing.current; i++) await new Promise(r => setTimeout(r, 150));
+      const saved = await pushRef.current();
+      if (!saved) {
+        setStatus(conflictRef.current
+          ? "Choisis d’abord la version à garder, puis change de joueur."
+          : "Le Pokédex n’est pas encore sauvegardé (connexion ?). Réessaie avant de changer de joueur.");
+        return false;
+      }
+      bind(null);
+      markConflict(false);
+      applyRef.current(emptySnapshot());
+      setStatus(`À bientôt ${current.nickname} ! Au suivant : choisis ou retrouve ton pseudonyme.`);
+      return true;
+    } finally { setBusy(false); }
+  }, [bind, markConflict]);
+
+  /** Conflit : reprendre la version en ligne. */
+  const keepOnline = useCallback(async () => {
+    const current = bindingRef.current;
+    if (!current) return;
+    markConflict(false);
+    await retrieve(current.nickname);
+  }, [markConflict, retrieve]);
+
+  /** Conflit : garder la version de cet appareil et l'envoyer en ligne. */
+  const keepThisDevice = useCallback(async () => {
+    const current = bindingRef.current;
+    if (!current) return;
+    setBusy(true);
+    try {
+      const online = await request<Remote>(`/${current.nickname}`);
+      const remote = await request<Remote>(`/${current.nickname}`, { method: "PUT", body: JSON.stringify({ snapshot: localRef.current, etag: online.etag }) });
+      bind({ nickname: remote.nickname, etag: remote.etag, synced: remote.snapshot });
+      markConflict(false);
+      setStatus("Pokédex de cet appareil sauvegardé ✓");
+    } catch (error) {
+      if (error instanceof RequestError && error.status === 404) lose();
+      else setStatus(messageOf(error, "Réessaie dans un instant."));
+    } finally { setBusy(false); }
+  }, [bind, lose, markConflict]);
 
   const remove = useCallback(async () => {
     const current = bindingRef.current;
@@ -190,11 +256,12 @@ export function useCloudSave(local: CloudSnapshot, apply: (snapshot: CloudSnapsh
       await request(`/${current.nickname}`, { method: "DELETE" });
       clearTimeout(timer.current);
       bind(null);
-      setStatus("Sauvegarde en ligne supprimée. Ton Pokédex reste sur cet appareil.");
-    } catch (error) { setStatus(error instanceof Error ? error.message : "La suppression n’a pas abouti."); }
+      markConflict(false);
+      setStatus("Sauvegarde en ligne supprimée. Le Pokédex reste sur cet appareil.");
+    } catch (error) { setStatus(messageOf(error, "La suppression n’a pas abouti.")); }
     finally { setBusy(false); }
-  }, [bind]);
+  }, [bind, markConflict]);
 
-  return { nickname: binding?.nickname ?? null, status, busy, suggest, create, retrieve, leave, remove };
+  return { nickname: binding?.nickname ?? null, status, busy, conflict, suggest, create, retrieve, switchPlayer, keepOnline, keepThisDevice, remove };
 }
 export type CloudSave = ReturnType<typeof useCloudSave>;

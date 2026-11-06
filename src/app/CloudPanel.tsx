@@ -5,7 +5,7 @@ import type { CloudSave } from "./useCloudSave";
 
 type Mode = "idle" | "choose" | "restore";
 
-export default function CloudPanel({ cloud }: { cloud: CloudSave }) {
+export default function CloudPanel({ cloud, localCount }: { cloud: CloudSave; localCount: number }) {
   const [mode, setMode] = useState<Mode>("idle");
   const [ideas, setIdeas] = useState<string[]>([]);
   const [chosen, setChosen] = useState("");
@@ -22,16 +22,21 @@ export default function CloudPanel({ cloud }: { cloud: CloudSave }) {
     <div className="cloud-head">
       <span className="cloud-icon" aria-hidden="true">☁️</span>
       <div>
-        <h2>Ton pseudonyme : <strong className="nickname">{cloud.nickname}</strong></h2>
-        <p>Ton Pokédex est sauvegardé tout seul. Sur un autre appareil, clique sur « J’ai déjà un pseudonyme » et tape-le.</p>
+        <h2>Joueur : <strong className="nickname">{cloud.nickname}</strong></h2>
+        <p>Ton Pokédex est sauvegardé tout seul. Un frère, une sœur veut jouer ? Clique sur « Changer de joueur ».</p>
       </div>
     </div>
-    <div className="cloud-actions">
-      <button className="link-button" disabled={cloud.busy} onClick={cloud.leave}>Quitter cette sauvegarde</button>
+    {cloud.conflict ? <div className="cloud-actions">
+      <button className="secondary" disabled={cloud.busy} onClick={() => void cloud.keepOnline()}>Reprendre le Pokédex en ligne</button>
+      <button className="secondary" disabled={cloud.busy} onClick={() => {
+        if (window.confirm("Garder le Pokédex de cet appareil ? Celui en ligne sera remplacé.")) void cloud.keepThisDevice();
+      }}>Garder celui de cet appareil</button>
+    </div> : <div className="cloud-actions">
+      <button className="secondary" disabled={cloud.busy} onClick={() => void cloud.switchPlayer()}>👋 Changer de joueur</button>
       <button className="link-button danger-link" disabled={cloud.busy} onClick={() => {
-        if (window.confirm(`Supprimer la sauvegarde en ligne « ${cloud.nickname} » ? Ton Pokédex restera sur cet appareil.`)) void cloud.remove();
+        if (window.confirm(`Supprimer la sauvegarde en ligne « ${cloud.nickname} » ? Le Pokédex restera sur cet appareil.`)) void cloud.remove();
       }}>Supprimer ma sauvegarde en ligne</button>
-    </div>
+    </div>}
     {cloud.status && <p className="cloud-status" role="status">{cloud.status}</p>}
   </section>;
 
@@ -39,8 +44,8 @@ export default function CloudPanel({ cloud }: { cloud: CloudSave }) {
     <div className="cloud-head">
       <span className="cloud-icon" aria-hidden="true">☁️</span>
       <div>
-        <h2>Sauvegarde ton Pokédex</h2>
-        <p>Choisis un pseudonyme rigolo pour retrouver tes Pokémon sur un autre appareil. Pas de mot de passe, pas de nom, pas d’e-mail.</p>
+        <h2>Qui joue ?</h2>
+        <p>Chaque enfant a son pseudonyme rigolo pour garder son Pokédex, même à plusieurs sur la même tablette. Pas de mot de passe, pas de nom, pas d’e-mail.</p>
       </div>
     </div>
 
@@ -62,10 +67,14 @@ export default function CloudPanel({ cloud }: { cloud: CloudSave }) {
       </div>
     </div>}
 
-    {mode === "restore" && <form className="cloud-choose" onSubmit={async e => { e.preventDefault(); if (await cloud.retrieve(typed)) setMode("idle"); }}>
+    {mode === "restore" && <form className="cloud-choose" onSubmit={async e => {
+      e.preventDefault();
+      if (localCount && !window.confirm(`Les ${localCount} Pokémon de cet appareil ne sont dans aucune sauvegarde : ils seront remplacés par le Pokédex de « ${typed.trim().toLowerCase()} ». Continuer ?`)) return;
+      if (await cloud.retrieve(typed)) { setMode("idle"); setTyped(""); }
+    }}>
       <label className="cloud-label" htmlFor="nickname-input">Ton pseudonyme, tout attaché :</label>
       <input id="nickname-input" className="nickname-input" autoCapitalize="none" autoCorrect="off" autoComplete="off" spellCheck={false} placeholder="pikachumalin" maxLength={40} value={typed} onChange={e => setTyped(e.target.value.replace(/\s/g, ""))} />
-      <small className="cloud-hint">Les Pokémon déjà attrapés sur cet appareil seront ajoutés à ta sauvegarde.</small>
+      <small className="cloud-hint">Ton Pokédex et tes réglages s’afficheront sur cet appareil.</small>
       <div className="cloud-actions">
         <button className="primary" type="submit" disabled={cloud.busy || typed.trim().length < 5}>Retrouver mon Pokédex</button>
         <button className="link-button" type="button" onClick={() => setMode("idle")}>Annuler</button>
